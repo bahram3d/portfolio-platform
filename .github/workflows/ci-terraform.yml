@@ -1,0 +1,48 @@
+name: ci-terraform
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/ci-terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/terraform/**"
+
+jobs:
+  fmt-and-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cloud: [oracle, aws, azure, gcp]
+    defaults:
+      run:
+        working-directory: infra/terraform/${{ matrix.cloud }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check module exists
+        id: check
+        run: |
+          if ls *.tf >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "infra/terraform/${{ matrix.cloud }} has no .tf files yet — skipping."
+          fi
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.check.outputs.exists == 'true'
+
+      - name: terraform fmt -check
+        if: steps.check.outputs.exists == 'true'
+        run: terraform fmt -check -recursive
+
+      - name: terraform init
+        if: steps.check.outputs.exists == 'true'
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        if: steps.check.outputs.exists == 'true'
+        run: terraform validate
